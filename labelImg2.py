@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 import argparse
 import codecs
 import distutils.spawn
+from datetime import datetime
 import os.path
 import platform
 import re
@@ -49,7 +50,8 @@ from libs.create_ml_io import CreateMLReader
 from libs.create_ml_io import JSON_EXT
 from libs.ustr import ustr
 from libs.hashableQListWidgetItem import HashableQListWidgetItem
-
+# a - licznik labeli już utworzonych przez prelabel bądź wcześniej przez labaliste
+# d - licznik labeli stworzonych bądź usuniętych w danym momencie
 __appname__ = 'labelImg'
 
 
@@ -791,7 +793,25 @@ class MainWindow(QMainWindow, WindowMixin):
         for action in self.actions.onShapesPresent:
             action.setEnabled(True)
         self.update_combo_box()
+        print('added label')
+        now = datetime.now()
+        line = str(now.strftime("%Y-%d-%m %H:%M:%S")) +';1'
+        labelsForLogs.append(line)
+        
 
+    def add_aleready_exist_label(self, shape):
+        shape.paint_label = self.display_label_option.isChecked()
+        item = HashableQListWidgetItem(shape.label)
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
+        item.setBackground(generate_color_by_text(shape.label))
+        self.items_to_shapes[item] = shape
+        self.shapes_to_items[shape] = item
+        self.label_list.addItem(item)
+        for action in self.actions.onShapesPresent:
+            action.setEnabled(True)
+        self.update_combo_box()
+        print('added already exist label')
     def remove_label(self, shape):
         if shape is None:
             # print('rm empty label')
@@ -801,9 +821,14 @@ class MainWindow(QMainWindow, WindowMixin):
         del self.shapes_to_items[shape]
         del self.items_to_shapes[item]
         self.update_combo_box()
+        print('removed label')
+        now = datetime.now()
+        line = str(now.strftime("%Y-%d-%m %H:%M:%S")) +';-1'
+        labelsForLogs.append(line)
 
     def load_labels(self, shapes):
         s = []
+        print(shapes)
         for label, points, line_color, fill_color, difficult in shapes:
             shape = Shape(label=label)
             for x, y in points:
@@ -828,7 +853,7 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 shape.fill_color = generate_color_by_text(label)
 
-            self.add_label(shape)
+            self.add_aleready_exist_label(shape)
         self.update_combo_box()
         self.canvas.load_shapes(s)
 
@@ -868,7 +893,6 @@ class MainWindow(QMainWindow, WindowMixin):
             elif self.label_file_format == LabelFileFormat.YOLO:
                 if annotation_file_path[-4:].lower() != ".txt":
                     annotation_file_path += TXT_EXT
-                    print('yolo!!!!!!!!!!!!!!')
                 self.label_file.save_yolo_format(annotation_file_path, shapes, self.file_path, self.image_data, self.label_hist,
                                                  self.line_color.getRgb(), self.fill_color.getRgb())
             elif self.label_file_format == LabelFileFormat.CREATE_ML:
@@ -879,8 +903,22 @@ class MainWindow(QMainWindow, WindowMixin):
             else:
                 self.label_file.save(annotation_file_path, shapes, self.file_path, self.image_data,
                                      self.line_color.getRgb(), self.fill_color.getRgb())
-
-            print('Image:{0} -> czemu nie działaszzzzzzzzzAnnotation:{1}'.format(self.file_path, annotation_file_path))
+            #kod dorobiony dodatkowo
+            file = str(annotation_file_path.split('train\\')[0]) + 'labelImgLogs.txt'
+            f = open(file, 'a')
+            #otwieranie bądź tworzenie pliku labelImgLogs w annotation
+            now = datetime.now()
+            #logowanie do pliku
+            #str(now.strftime("%Y-%d-%m %H:%M:%S"))
+            #lb to skrót od label 
+            #labelsForLogs jest tablicą 
+            for lb in labelsForLogs:
+                line = str(lb)+';'+str(annotation_file_path)+'\n'
+                f.write(line)
+            labelsForLogs.clear()
+            #zamykanie pliku
+            f.close()
+            print('Image:{0} -> Annotation:{1}'.format(self.file_path, annotation_file_path))
             return True
         except LabelFileError as e:
             self.error_message(u'Error saving label data', u'<b>%s</b>' % e)
@@ -1557,7 +1595,7 @@ class MainWindow(QMainWindow, WindowMixin):
         self.set_format(FORMAT_YOLO)
         t_yolo_parse_reader = YoloReader(txt_path, self.image)
         shapes = t_yolo_parse_reader.get_shapes()
-        print(shapes)
+        #print(shapes)
         self.load_labels(shapes)
         self.canvas.verified = t_yolo_parse_reader.verified
 
@@ -1635,5 +1673,7 @@ def main():
     app, _win = get_main_app(sys.argv)
     return app.exec_()
 
+
+labelsForLogs = []
 if __name__ == '__main__':
     sys.exit(main())
